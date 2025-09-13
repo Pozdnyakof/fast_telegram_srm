@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 
 from .config import get_settings
-from .logging import setup_logging
+from .logging_config import setup_logging
 from .handlers.my_chat_member import router as my_chat_member_router
 from .handlers.chat_member import router as chat_member_router
 from .services.container import ServiceContainer, set_container
