@@ -1,0 +1,10 @@
+aiogram>=3.4.1,<4
+aiosqlite>=0.20.0
+python-dotenv>=1.0.1
+pydantic-settings>=2.2.1
+# Google Sheets
+gspread>=6.0.0
+gspread-asyncio>=1.10.0
+google-auth>=2.29.0
+# Robust async retry
+backoff>=2.2.1
