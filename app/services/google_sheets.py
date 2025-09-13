@@ -81,16 +81,15 @@ class GoogleSheetsService:
         spreadsheet = await self._get_spreadsheet()
         base = _sanitize_sheet_title(title)
         final_title = base
-        suffix = 1
-
-        # Try to fetch existing worksheet first
+        # Detect existing base sheet; if found, treat as collision and start with suffix 2
         try:
             await spreadsheet.worksheet(final_title)
-            return final_title
+            suffix = 2
+            final_title = f"{base} {suffix}"[:100]
         except WorksheetNotFound:
-            pass
+            suffix = 1
 
-        # Try creating; on duplicate, add suffix
+        # Try creating; on duplicate, add incrementing suffix
         while True:
             try:
                 ws = await spreadsheet.add_worksheet(title=final_title, rows=100, cols=16)
@@ -102,8 +101,7 @@ class GoogleSheetsService:
                 message = str(e)
                 if "already exists" in message.lower() or "duplicate" in message.lower():
                     suffix += 1
-                    candidate = f"{base} {suffix}"
-                    final_title = candidate[:100]
+                    final_title = f"{base} {suffix}"[:100]
                     continue
                 raise
 
