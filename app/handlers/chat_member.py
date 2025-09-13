@@ -14,21 +14,31 @@ router = Router(name=__name__)
 async def on_chat_member(update: ChatMemberUpdated):
     """Handle new member joins via invite link and write a row to Google Sheets."""
     chat = update.chat
-    if chat is None or chat.type != "channel":
+    if chat is None or chat.type not in ("channel", "supergroup"):
+        logging.getLogger(__name__).info(
+            "Skipping chat_member: unsupported chat type %s",
+            getattr(chat, "type", None),
+            extra={"operation": "chat_member_skip", "channel_id": getattr(chat, "id", None)},
+        )
         return
 
     # Only when a user became "member" and joined via invite link
     new_status = update.new_chat_member.status if update.new_chat_member else None
     if new_status != "member":
-        logging.getLogger(__name__).debug(
-            "Ignoring chat_member: status=%s", new_status, extra={"channel_id": chat.id, "operation": "chat_member_skip"}
+        logging.getLogger(__name__).info(
+            "Skipping chat_member: new_status=%s",
+            new_status,
+            extra={"channel_id": chat.id, "operation": "chat_member_skip"},
         )
         return
     if not update.invite_link:
-        logging.getLogger(__name__).debug(
-            "Ignoring chat_member without invite_link", extra={"channel_id": chat.id, "operation": "chat_member_skip"}
-        )
-        return
+        from ..config import get_settings
+        if not get_settings().LOG_JOINS_WITHOUT_INVITE:
+            logging.getLogger(__name__).info(
+                "Skipping chat_member: no invite_link (user didn't join via invite link)",
+                extra={"channel_id": chat.id, "operation": "chat_member_skip"},
+            )
+            return
 
     channel_id = chat.id
     channel_title = chat.title or f"Channel {channel_id}"
@@ -43,6 +53,8 @@ async def on_chat_member(update: ChatMemberUpdated):
 
     invite_url = getattr(update.invite_link, "invite_link", "") or ""
     invite_name = getattr(update.invite_link, "name", "") or ""
+    if not invite_url and not invite_name:
+        invite_name = "(no invite)"
 
     # Resolve sheet name from DB or create fallback
     container = get_container()
@@ -65,6 +77,12 @@ async def on_chat_member(update: ChatMemberUpdated):
         invite_url,
         invite_name,
     ]
+
+    logging.getLogger(__name__).info(
+        "Appending join event to sheet='%s'...",
+        sheet_name,
+        extra={"channel_id": channel_id, "user_id": user.id, "operation": "chat_member_prepare"},
+    )
 
     await container.gsheets.append_row(sheet_name, row)
 

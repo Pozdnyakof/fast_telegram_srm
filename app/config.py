@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # Timezone for timestamps (IANA name)
     TIMEZONE: str = "Europe/Moscow"
 
+    # Optional: log joins even without invite link
+    LOG_JOINS_WITHOUT_INVITE: bool = False
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
