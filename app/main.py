@@ -45,15 +45,19 @@ async def main() -> None:
         bot = Bot(token=settings.BOT_TOKEN, parse_mode=ParseMode.HTML)
     dp = Dispatcher()
 
-    # Basic error logging middleware
+    # Basic error logging handler (Aiogram 3.x ErrorEvent)
     @dp.errors()
-    async def errors_handler(update, exception):  # type: ignore[no-redef]
+    async def errors_handler(event):  # type: ignore[no-redef]
+        # event is ErrorEvent in Aiogram 3.x and has .exception and .update
+        exception = getattr(event, "exception", None)
+        update = getattr(event, "update", None)
         extra = {}
         try:
-            chat = getattr(update, "chat", None) or getattr(getattr(update, "message", None), "chat", None)
-            if chat and getattr(chat, "id", None):
-                extra["channel_id"] = getattr(chat, "id")
-            user = getattr(getattr(update, "from_user", None), "id", None)
+            msg = getattr(update, "message", None) or getattr(update, "callback_query", None)
+            chat = getattr(getattr(msg, "chat", None), "id", None) or getattr(getattr(update, "chat", None), "id", None)
+            if chat:
+                extra["channel_id"] = chat
+            user = getattr(getattr(msg, "from_user", None), "id", None) or getattr(getattr(update, "from_user", None), "id", None)
             if user:
                 extra["user_id"] = user
         except Exception:

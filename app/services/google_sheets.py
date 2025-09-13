@@ -63,19 +63,22 @@ class GoogleSheetsService:
 
         def _creds_factory() -> Credentials:
             # Accept either file path, raw JSON string, or base64-encoded JSON
-            ci = self.credentials_input
+            ci = (self.credentials_input or "").strip()
+            # Remove optional surrounding quotes from .env (e.g. "C:\\path\\key.json")
+            if (ci.startswith('"') and ci.endswith('"')) or (ci.startswith("'") and ci.endswith("'")):
+                ci = ci[1:-1].strip()
             # File path
             if ci and os.path.isfile(ci):
                 return Credentials.from_service_account_file(ci, scopes=SCOPES)
             # Raw JSON
-            if ci and ci.strip().startswith("{"):
-                info = json.loads(ci)
+            if ci and ci.lstrip("\ufeff").startswith("{"):
+                info = json.loads(ci.lstrip("\ufeff"))
                 return Credentials.from_service_account_info(info, scopes=SCOPES)
             # Base64-encoded JSON (common in env/secrets)
             if ci:
                 try:
                     decoded = base64.b64decode(ci).decode("utf-8")
-                    info = json.loads(decoded)
+                    info = json.loads(decoded.lstrip("\ufeff"))
                     return Credentials.from_service_account_info(info, scopes=SCOPES)
                 except Exception:
                     pass
