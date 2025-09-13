@@ -29,7 +29,20 @@ async def main() -> None:
     if not settings.BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set. Please configure your .env or environment variables.")
 
-    bot = Bot(token=settings.BOT_TOKEN, parse_mode=ParseMode.HTML)
+    # Aiogram 3.7+ moved default properties to DefaultBotProperties
+    try:
+        from aiogram.client.default import DefaultBotProperties  # type: ignore
+    except ImportError:
+        DefaultBotProperties = None  # type: ignore
+
+    if DefaultBotProperties:
+        bot = Bot(
+            token=settings.BOT_TOKEN,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+    else:
+        # Fallback for older Aiogram versions (<3.7)
+        bot = Bot(token=settings.BOT_TOKEN, parse_mode=ParseMode.HTML)
     dp = Dispatcher()
 
     # Basic error logging middleware
