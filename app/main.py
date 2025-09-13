@@ -8,6 +8,9 @@ from .config import get_settings
 from .logging import setup_logging
 from .handlers.my_chat_member import router as my_chat_member_router
 from .handlers.chat_member import router as chat_member_router
+from .services.container import ServiceContainer, set_container
+from .services.db import Database
+from .services.google_sheets import create_google_sheets_service_from_settings
 
 
 async def main() -> None:
@@ -23,6 +26,12 @@ async def main() -> None:
     # Register routers
     dp.include_router(my_chat_member_router)
     dp.include_router(chat_member_router)
+
+    # Initialize services and set container
+    db = Database(settings.DB_PATH)
+    await db.init_db()
+    gsheets = create_google_sheets_service_from_settings(settings)
+    set_container(ServiceContainer(db=db, gsheets=gsheets))
 
     logging.getLogger(__name__).info("Starting bot polling...")
     await dp.start_polling(bot)
