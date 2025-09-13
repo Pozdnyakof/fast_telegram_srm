@@ -6,6 +6,7 @@ from aiogram.types import ChatMemberUpdated
 
 from ..services.container import get_container
 from ..services.google_sheets import sanitize_sheet_title
+from ..utils import join_cache
 
 router = Router(name=__name__)
 
@@ -31,7 +32,11 @@ async def on_chat_member(update: ChatMemberUpdated):
             extra={"channel_id": chat.id, "operation": "chat_member_skip"},
         )
         return
-    if not update.invite_link:
+    # Determine whether this is an invite-based join.
+    # Bot API: invite_link present when user joins via link; via_join_request indicates approved request without link in this update;
+    # via_chat_folder_invite_link indicates join via folder-wide link (no per-link name).
+    invite_based = bool(update.invite_link) or getattr(update, "via_join_request", False) or getattr(update, "via_chat_folder_invite_link", False)
+    if not invite_based:
         from ..config import get_settings
         if not get_settings().LOG_JOINS_WITHOUT_INVITE:
             logging.getLogger(__name__).info(
@@ -53,6 +58,15 @@ async def on_chat_member(update: ChatMemberUpdated):
 
     invite_url = getattr(update.invite_link, "invite_link", "") or ""
     invite_name = getattr(update.invite_link, "name", "") or ""
+
+    # If this update lacks invite_link but was approved (via_join_request), try to recover from cache
+    if not invite_url and getattr(update, "via_join_request", False):
+        cached = join_cache.pop(chat.id, user.id)
+        if cached:
+            invite_url, invite_name = cached
+    # If joined via chat folder invite link, annotate for clarity
+    if getattr(update, "via_chat_folder_invite_link", False) and not invite_name:
+        invite_name = "(folder invite)"
     if not invite_url and not invite_name:
         invite_name = "(no invite)"
 
@@ -69,6 +83,14 @@ async def on_chat_member(update: ChatMemberUpdated):
     from ..config import get_settings
     tz = ZoneInfo(get_settings().TIMEZONE)
     ts = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+    # Diagnostics for invite-related flags
+    logging.getLogger(__name__).info(
+        "Join flags: has_invite_link=%s, via_join_request=%s, via_chat_folder_invite_link=%s",
+        bool(update.invite_link),
+        getattr(update, "via_join_request", False),
+        getattr(update, "via_chat_folder_invite_link", False),
+        extra={"channel_id": channel_id, "user_id": user.id, "operation": "chat_member_flags"},
+    )
     row = [
         ts,
         str(user.id),

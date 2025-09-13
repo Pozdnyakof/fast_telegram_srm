@@ -8,6 +8,7 @@ from aiogram.types import ChatJoinRequest
 from ..services.container import get_container
 from ..services.google_sheets import sanitize_sheet_title
 from ..config import get_settings
+from ..utils import join_cache
 
 
 router = Router(name=__name__)
@@ -32,6 +33,8 @@ async def on_chat_join_request(update: ChatJoinRequest):
 
     invite_url = getattr(update.invite_link, "invite_link", "") or ""
     invite_name = getattr(update.invite_link, "name", "") or ""
+    if getattr(update.invite_link, "creates_join_request", False) and not invite_name:
+        invite_name = "(request link)"
 
     container = get_container()
     sheet_name = await container.db.get_sheet_name(channel_id)
@@ -56,6 +59,14 @@ async def on_chat_join_request(update: ChatJoinRequest):
         sheet_name,
         extra={"channel_id": channel_id, "user_id": user.id, "operation": "chat_join_request"},
     )
+    # Remember metadata for later ChatMemberUpdated after approval
+    try:
+        join_cache.remember(chat_id=channel_id, user_id=user.id, invite_url=invite_url, invite_name=invite_name)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Failed to cache join request metadata",
+            extra={"channel_id": channel_id, "user_id": user.id, "operation": "chat_join_request"},
+        )
     await container.gsheets.append_row(sheet_name, row)
     logging.getLogger(__name__).info(
         "Appended join request: sheet='%s'",
