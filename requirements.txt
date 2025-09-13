@@ -8,3 +8,4 @@ gspread-asyncio>=1.10.0
 google-auth>=2.29.0
 # Robust async retry
 backoff>=2.2.1
+sentry-sdk>=2.13.0

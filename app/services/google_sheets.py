@@ -66,10 +66,12 @@ class GoogleSheetsService:
     async def _get_client(self) -> AsyncioGspreadClient:
         return await self._manager.authorize()
 
+    @backoff.on_exception(backoff.expo, (APIError, ClientError), max_time=60)
     async def _get_spreadsheet(self):
         client = await self._get_client()
         return await client.open_by_key(self.spreadsheet_id)
 
+    @backoff.on_exception(backoff.expo, (APIError, ClientError), max_time=60)
     async def ensure_sheet(self, title: str) -> str:
         """Ensure worksheet with sanitized title exists; return the final title used.
 

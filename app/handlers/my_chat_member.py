@@ -44,5 +44,7 @@ async def on_my_chat_member(update: ChatMemberUpdated):
     await container.db.upsert_channel(channel_id=channel_id, sheet_name=final_title)
 
     logging.getLogger(__name__).info(
-        "Initialized channel mapping: channel_id=%s -> sheet='%s'", channel_id, final_title
+        "Initialized channel mapping: sheet='%s'",
+        final_title,
+        extra={"channel_id": channel_id, "operation": "my_chat_member_init"},
     )
