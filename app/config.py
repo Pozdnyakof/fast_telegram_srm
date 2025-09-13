@@ -31,10 +31,10 @@ class Settings(BaseSettings):
     TIMEZONE: str = "Europe/Moscow"
 
     # Optional: log joins even without invite link
-    LOG_JOINS_WITHOUT_INVITE: bool = False
+    LOG_JOINS_WITHOUT_INVITE: bool = True
 
     # Optional: run a Google Sheets self-check on startup
-    GSHEETS_SELF_CHECK: bool = False
+    GSHEETS_SELF_CHECK: bool = True
 
 
 @lru_cache(maxsize=1)

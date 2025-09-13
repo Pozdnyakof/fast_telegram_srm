@@ -8,6 +8,7 @@ from .config import get_settings
 from .logging_config import setup_logging
 from .handlers.my_chat_member import router as my_chat_member_router
 from .handlers.chat_member import router as chat_member_router
+from .handlers.chat_join_request import router as chat_join_request_router
 from .services.container import ServiceContainer, set_container
 from .services.db import Database
 from .services.google_sheets import create_google_sheets_service_from_settings
@@ -71,6 +72,7 @@ async def main() -> None:
     # Register routers
     dp.include_router(my_chat_member_router)
     dp.include_router(chat_member_router)
+    dp.include_router(chat_join_request_router)
 
     # Initialize services and set container
     db = Database(settings.DB_PATH)
