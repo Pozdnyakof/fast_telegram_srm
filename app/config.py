@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Optional: log joins even without invite link
     LOG_JOINS_WITHOUT_INVITE: bool = False
 
+    # Optional: run a Google Sheets self-check on startup
+    GSHEETS_SELF_CHECK: bool = False
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

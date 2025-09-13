@@ -6,6 +6,7 @@ import json
 import os
 import re
 from typing import Any, Callable, Optional
+import logging
 
 import backoff
 from aiohttp import ClientError
@@ -69,16 +70,23 @@ class GoogleSheetsService:
                 ci = ci[1:-1].strip()
             # File path
             if ci and os.path.isfile(ci):
+                logging.getLogger(__name__).info("Google creds source: file path")
                 return Credentials.from_service_account_file(ci, scopes=SCOPES)
             # Raw JSON
             if ci and ci.lstrip("\ufeff").startswith("{"):
                 info = json.loads(ci.lstrip("\ufeff"))
+                logging.getLogger(__name__).info(
+                    "Google creds source: inline JSON (email=%s)", info.get("client_email")
+                )
                 return Credentials.from_service_account_info(info, scopes=SCOPES)
             # Base64-encoded JSON (common in env/secrets)
             if ci:
                 try:
                     decoded = base64.b64decode(ci).decode("utf-8")
                     info = json.loads(decoded.lstrip("\ufeff"))
+                    logging.getLogger(__name__).info(
+                        "Google creds source: base64 JSON (email=%s)", info.get("client_email")
+                    )
                     return Credentials.from_service_account_info(info, scopes=SCOPES)
                 except Exception:
                     pass
@@ -92,7 +100,10 @@ class GoogleSheetsService:
     @backoff.on_exception(backoff.expo, (APIError, ClientError), max_time=60)
     async def _get_spreadsheet(self):
         client = await self._get_client()
-        return await client.open_by_key(self.spreadsheet_id)
+        logging.getLogger(__name__).info("Opening spreadsheet by key: %s", self.spreadsheet_id)
+        ss = await client.open_by_key(self.spreadsheet_id)
+        logging.getLogger(__name__).info("Opened spreadsheet: %s", getattr(ss, "title", "<unknown>"))
+        return ss
 
     @backoff.on_exception(backoff.expo, (APIError, ClientError), max_time=60)
     async def ensure_sheet(self, title: str) -> str:
@@ -115,9 +126,11 @@ class GoogleSheetsService:
         # Try creating; on duplicate, add incrementing suffix
         while True:
             try:
+                logging.getLogger(__name__).info("Ensuring sheet: trying title '%s'", final_title)
                 ws = await spreadsheet.add_worksheet(title=final_title, rows=100, cols=16)
                 # Write header row once for a new sheet
                 await ws.append_row(HEADERS, value_input_option="USER_ENTERED")
+                logging.getLogger(__name__).info("Created sheet '%s' and wrote headers", final_title)
                 return final_title
             except APIError as e:
                 # If title already exists (race), try next suffix; else re-raise
@@ -133,13 +146,27 @@ class GoogleSheetsService:
         """Append a row to the worksheet with retries on transient errors."""
         spreadsheet = await self._get_spreadsheet()
         try:
+            logging.getLogger(__name__).info("Appending row: locating sheet '%s'", sheet_title)
             ws = await spreadsheet.worksheet(sheet_title)
         except WorksheetNotFound:
             # Create sheet on the fly if missing
             created_title = await self.ensure_sheet(sheet_title)
             ws = await spreadsheet.worksheet(created_title)
 
+        logging.getLogger(__name__).info("Appending row to '%s': %s", sheet_title, row)
         await ws.append_row(row, value_input_option="USER_ENTERED")
+        logging.getLogger(__name__).info("Row appended to '%s'", sheet_title)
+
+    async def health_check(self) -> None:
+        """Lightweight check that we can auth and access the spreadsheet."""
+        ss = await self._get_spreadsheet()
+        try:
+            # Try to list first worksheet to confirm access
+            await ss.worksheets()
+            logging.getLogger(__name__).info("Google Sheets health_check OK")
+        except Exception as e:
+            logging.getLogger(__name__).exception("Google Sheets health_check failed: %s", e)
+            raise
 
 
 def create_google_sheets_service_from_settings(settings: Settings) -> GoogleSheetsService:

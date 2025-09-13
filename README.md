@@ -15,6 +15,7 @@
 	  - `GOOGLE_SPREADSHEET_ID=...`
 	  - `GOOGLE_SERVICE_ACCOUNT_JSON=` one of: file path, raw JSON, or base64-encoded JSON
 		- Optional: `TIMEZONE=Europe/Moscow`, `LOG_LEVEL=INFO`, `SENTRY_DSN=`, `LOG_JOINS_WITHOUT_INVITE=false`
+			- Diagnostics (optional): `GSHEETS_SELF_CHECK=true`
 
 4. Run the bot from the project root to avoid import issues:
 	- `python -m app.main`
@@ -30,3 +31,11 @@ Notes
 - Check logs:
 	- You should see `Appending join event to sheet='...'...` followed by `Appended join event: sheet='...'`.
 	- If you see `Skipping chat_member: no invite_link`, enable the flag above or join with an invite link.
+
+### Google Sheets & credentials setup
+- Share the target spreadsheet (by its ID) with your service account email as Editor. The email is visible in logs after startup (creds source shows client_email) or inside your JSON key under `client_email`.
+- `GOOGLE_SERVICE_ACCOUNT_JSON` can be provided as:
+	1) File path (e.g., `C:\path\to\key.json`). Quotes around the path are accepted.
+	2) Inline RAW JSON (single line). Example: `{"type":"service_account",...}` — ensure it’s valid JSON; BOM is tolerated.
+	3) Base64-encoded JSON.
+- To verify connectivity early, set `GSHEETS_SELF_CHECK=true` — startup will log successful access or a detailed error.

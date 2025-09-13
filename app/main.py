@@ -76,6 +76,12 @@ async def main() -> None:
     db = Database(settings.DB_PATH)
     await db.init_db()
     gsheets = create_google_sheets_service_from_settings(settings)
+    if settings.GSHEETS_SELF_CHECK:
+        try:
+            await gsheets.health_check()
+        except Exception as e:
+            logging.getLogger(__name__).exception("Google Sheets self-check failed: %s", e)
+            # proceed to run to allow transient errors to resolve via backoff
     set_container(ServiceContainer(db=db, gsheets=gsheets))
 
     logging.getLogger(__name__).info("Starting bot polling...")
