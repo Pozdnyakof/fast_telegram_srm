@@ -1,5 +1,6 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from aiogram import Router
 from aiogram.types import ChatMemberUpdated
 
@@ -52,8 +53,10 @@ async def on_chat_member(update: ChatMemberUpdated):
         sheet_name = await container.gsheets.ensure_sheet(sheet_title)
         await container.db.upsert_channel(channel_id, sheet_name)
 
-    # Prepare row, timestamp in UTC
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    # Prepare row, timestamp in configured timezone (default Europe/Moscow)
+    from ..config import get_settings
+    tz = ZoneInfo(get_settings().TIMEZONE)
+    ts = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
     row = [
         ts,
         str(user.id),

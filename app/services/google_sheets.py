@@ -1,6 +1,9 @@
 """Async Google Sheets client helpers (Stage 2 implementation)."""
 from __future__ import annotations
 
+import base64
+import json
+import os
 import re
 from typing import Any, Callable, Optional
 
@@ -49,17 +52,34 @@ sanitize_sheet_title = _sanitize_sheet_title
 
 
 class GoogleSheetsService:
-    def __init__(self, credentials_path: Optional[str], spreadsheet_id: Optional[str]):
-        if not credentials_path:
+    def __init__(self, credentials: Optional[str], spreadsheet_id: Optional[str]):
+        if not credentials:
             raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON is not set")
         if not spreadsheet_id:
             raise RuntimeError("GOOGLE_SPREADSHEET_ID is not set")
 
-        self.credentials_path = credentials_path
+        self.credentials_input = credentials
         self.spreadsheet_id = spreadsheet_id
 
         def _creds_factory() -> Credentials:
-            return Credentials.from_service_account_file(self.credentials_path, scopes=SCOPES)
+            # Accept either file path, raw JSON string, or base64-encoded JSON
+            ci = self.credentials_input
+            # File path
+            if ci and os.path.isfile(ci):
+                return Credentials.from_service_account_file(ci, scopes=SCOPES)
+            # Raw JSON
+            if ci and ci.strip().startswith("{"):
+                info = json.loads(ci)
+                return Credentials.from_service_account_info(info, scopes=SCOPES)
+            # Base64-encoded JSON (common in env/secrets)
+            if ci:
+                try:
+                    decoded = base64.b64decode(ci).decode("utf-8")
+                    info = json.loads(decoded)
+                    return Credentials.from_service_account_info(info, scopes=SCOPES)
+                except Exception:
+                    pass
+            raise RuntimeError("Invalid GOOGLE_SERVICE_ACCOUNT_JSON: provide a file path, raw JSON, or base64 JSON")
 
         self._manager = AsyncioGspreadClientManager(_creds_factory)
 
@@ -121,6 +141,6 @@ class GoogleSheetsService:
 
 def create_google_sheets_service_from_settings(settings: Settings) -> GoogleSheetsService:
     return GoogleSheetsService(
-        credentials_path=settings.GOOGLE_SERVICE_ACCOUNT_JSON,
+        credentials=settings.GOOGLE_SERVICE_ACCOUNT_JSON,
         spreadsheet_id=settings.GOOGLE_SPREADSHEET_ID,
     )

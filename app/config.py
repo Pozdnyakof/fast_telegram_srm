@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     SENTRY_DSN: Optional[str] = None
 
+    # Timezone for timestamps (IANA name)
+    TIMEZONE: str = "Europe/Moscow"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
