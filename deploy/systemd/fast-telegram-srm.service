@@ -1,0 +1,26 @@
+[Unit]
+Description=Fast Telegram SRM bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bot
+Group=bot
+WorkingDirectory=/opt/fast_telegram_srm
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/fast_telegram_srm
+# Load environment variables from file
+EnvironmentFile=/opt/fast_telegram_srm/.env
+# Activate venv and run
+ExecStart=/bin/bash -lc '/opt/fast_telegram_srm/.venv/bin/python -m app.main'
+Restart=on-failure
+RestartSec=5s
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
