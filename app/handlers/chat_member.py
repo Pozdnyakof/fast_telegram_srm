@@ -32,12 +32,24 @@ async def on_chat_member(update: ChatMemberUpdated):
             extra={"channel_id": chat.id, "operation": "chat_member_skip"},
         )
         return
+    # Extract user info early to use for de-duplication checks
+    user = update.new_chat_member.user if update.new_chat_member else None
+    if user is None:
+        return
     # If this membership event is an approval of a previously submitted join request,
     # we do NOT log it to avoid duplicate rows (join request was already recorded).
     if getattr(update, "via_join_request", False):
         logging.getLogger(__name__).info(
             "Skipping chat_member: approval of join request (already logged at request time)",
-            extra={"channel_id": chat.id, "operation": "chat_member_skip_join_request"},
+            extra={"channel_id": chat.id, "user_id": getattr(user, "id", None), "operation": "chat_member_skip_join_request"},
+        )
+        return
+    # Additionally, if we have a recent cached join request for this user in this chat,
+    # treat this as the approval path and skip logging to avoid duplicates even if the flag is absent.
+    if join_cache.pop(chat.id, user.id):
+        logging.getLogger(__name__).info(
+            "Skipping chat_member: matched cached join request (avoiding duplicate)",
+            extra={"channel_id": chat.id, "user_id": user.id, "operation": "chat_member_skip_cached_request"},
         )
         return
     # Determine whether this is an invite-based join.
@@ -55,11 +67,6 @@ async def on_chat_member(update: ChatMemberUpdated):
 
     channel_id = chat.id
     channel_title = chat.title or f"Channel {channel_id}"
-
-    # Extract user info
-    user = update.new_chat_member.user if update.new_chat_member else None
-    if user is None:
-        return
 
     full_name = getattr(user, "full_name", None) or ""
     username = f"@{user.username}" if getattr(user, "username", None) else ""
