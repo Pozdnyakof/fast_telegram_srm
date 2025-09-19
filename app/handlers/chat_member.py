@@ -32,6 +32,14 @@ async def on_chat_member(update: ChatMemberUpdated):
             extra={"channel_id": chat.id, "operation": "chat_member_skip"},
         )
         return
+    # If this membership event is an approval of a previously submitted join request,
+    # we do NOT log it to avoid duplicate rows (join request was already recorded).
+    if getattr(update, "via_join_request", False):
+        logging.getLogger(__name__).info(
+            "Skipping chat_member: approval of join request (already logged at request time)",
+            extra={"channel_id": chat.id, "operation": "chat_member_skip_join_request"},
+        )
+        return
     # Determine whether this is an invite-based join.
     # Bot API: invite_link present when user joins via link; via_join_request indicates approved request without link in this update;
     # via_chat_folder_invite_link indicates join via folder-wide link (no per-link name).
@@ -59,11 +67,7 @@ async def on_chat_member(update: ChatMemberUpdated):
     invite_url = getattr(update.invite_link, "invite_link", "") or ""
     invite_name = getattr(update.invite_link, "name", "") or ""
 
-    # If this update lacks invite_link but was approved (via_join_request), try to recover from cache
-    if not invite_url and getattr(update, "via_join_request", False):
-        cached = join_cache.pop(chat.id, user.id)
-        if cached:
-            invite_url, invite_name = cached
+    # Join request approvals are skipped above; no need to recover cached metadata here.
     # If joined via chat folder invite link, annotate for clarity
     if getattr(update, "via_chat_folder_invite_link", False) and not invite_name:
         invite_name = "(folder invite)"

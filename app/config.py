@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     TIMEZONE: str = "Europe/Moscow"
 
     # Optional: log joins even without invite link
-    LOG_JOINS_WITHOUT_INVITE: bool = True
+    LOG_JOINS_WITHOUT_INVITE: bool = False
 
     # Optional: run a Google Sheets self-check on startup
     GSHEETS_SELF_CHECK: bool = True
