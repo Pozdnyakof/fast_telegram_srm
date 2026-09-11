@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     # Google Sheets stays direct.
     TELEGRAM_PROXY: Optional[str] = None
 
+    # Optional Postgres DSN for the membership journal: every join, leave and
+    # join request also goes to tg_parser's `srm.membership_events`, so invites
+    # can be attributed. Unset keeps the journal off; the sheet is unaffected
+    # either way. The role in the DSN should be able to insert and nothing else.
+    EVENT_JOURNAL_DSN: Optional[str] = None
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

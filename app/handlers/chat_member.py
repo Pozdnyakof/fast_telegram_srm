@@ -1,19 +1,27 @@
 import logging
 from datetime import datetime
+from typing import Optional
 from zoneinfo import ZoneInfo
 from aiogram import Router
-from aiogram.types import ChatMemberUpdated
+from aiogram.types import ChatMemberUpdated, Update
 
 from ..services.container import get_container
 from ..services.google_sheets import sanitize_sheet_title
+from ..services.journal import event_from_member_update, record_quietly
 from ..utils import join_cache
 
 router = Router(name=__name__)
 
 
 @router.chat_member()
-async def on_chat_member(update: ChatMemberUpdated):
-    """Handle new member joins via invite link and write a row to Google Sheets."""
+async def on_chat_member(update: ChatMemberUpdated, event_update: Optional[Update] = None):
+    """Handle new member joins via invite link and write a row to Google Sheets.
+
+    Every membership change goes to the journal first, apart from the
+    sheet's own skip rules below. `event_update` is the raw update that
+    aiogram passes along; its update_id keeps the journal free of repeats.
+    """
+    await record_quietly(get_container().journal, lambda: event_from_member_update(update, event_update))
     chat = update.chat
     if chat is None or chat.type not in ("channel", "supergroup"):
         logging.getLogger(__name__).info(

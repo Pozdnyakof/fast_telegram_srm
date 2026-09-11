@@ -1,5 +1,7 @@
 import asyncio
+import contextlib
 import logging
+from typing import AsyncIterator, Optional
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -12,6 +14,7 @@ from .handlers.chat_join_request import router as chat_join_request_router
 from .services.container import ServiceContainer, set_container
 from .services.db import Database
 from .services.google_sheets import create_google_sheets_service_from_settings
+from .services.journal import EventJournal, PostgresSink, run_delivery
 
 
 async def main() -> None:
@@ -92,10 +95,38 @@ async def main() -> None:
         except Exception as e:
             logging.getLogger(__name__).exception("Google Sheets self-check failed: %s", e)
             # proceed to run to allow transient errors to resolve via backoff
-    set_container(ServiceContainer(db=db, gsheets=gsheets))
+    journal = EventJournal(db) if settings.EVENT_JOURNAL_DSN else None
+    set_container(ServiceContainer(db=db, gsheets=gsheets, journal=journal))
 
     logging.getLogger(__name__).info("Starting bot polling...")
-    await dp.start_polling(bot)
+    async with journal_delivery(journal, settings.EVENT_JOURNAL_DSN):
+        await dp.start_polling(bot)
+
+
+@contextlib.asynccontextmanager
+async def journal_delivery(
+    journal: Optional[EventJournal], dsn: Optional[str], stop_timeout: float = 30.0
+) -> AsyncIterator[None]:
+    """Deliver the journal in the background for as long as the bot polls."""
+    if journal is None or not dsn:
+        logging.getLogger(__name__).info("Membership journal is off (EVENT_JOURNAL_DSN is not set)")
+        yield
+        return
+    sink = PostgresSink(dsn)
+    stop = asyncio.Event()
+    delivery = asyncio.create_task(run_delivery(journal, sink, stop), name="journal-delivery")
+    logging.getLogger(__name__).info("Membership journal is on")
+    try:
+        yield
+    finally:
+        stop.set()
+        try:
+            await asyncio.wait_for(delivery, timeout=stop_timeout)
+        except asyncio.TimeoutError:
+            logging.getLogger(__name__).warning(
+                "Journal delivery did not stop in time; undelivered entries wait in the outbox"
+            )
+        await sink.close()
 
 
 if __name__ == "__main__":

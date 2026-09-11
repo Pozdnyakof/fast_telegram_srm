@@ -1,12 +1,14 @@
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from aiogram import Router
-from aiogram.types import ChatJoinRequest
+from aiogram.types import ChatJoinRequest, Update
 
 from ..services.container import get_container
 from ..services.google_sheets import sanitize_sheet_title
+from ..services.journal import event_from_join_request, record_quietly
 from ..config import get_settings
 from ..utils import join_cache
 
@@ -15,8 +17,12 @@ router = Router(name=__name__)
 
 
 @router.chat_join_request()
-async def on_chat_join_request(update: ChatJoinRequest):
-    """Handle join requests (channels with approval). Write a row to Google Sheets."""
+async def on_chat_join_request(update: ChatJoinRequest, event_update: Optional[Update] = None):
+    """Handle join requests (channels with approval). Write a row to Google Sheets.
+
+    Every request goes to the journal first, before the sheet's 12-hour dedup.
+    """
+    await record_quietly(get_container().journal, lambda: event_from_join_request(update, event_update))
     chat = update.chat
     if chat is None or chat.type not in ("channel", "supergroup"):
         return

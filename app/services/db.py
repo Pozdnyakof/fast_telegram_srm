@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import List, Optional, Sequence, Tuple
 
 import aiosqlite
 
@@ -33,6 +33,20 @@ class Database:
                     user_id INTEGER NOT NULL,
                     last_logged_at INTEGER NOT NULL,
                     PRIMARY KEY (channel_id, user_id)
+                )
+                """
+            )
+            # Outbox of the membership journal: entries wait here until
+            # delivered, so an outage on the receiving side loses nothing.
+            # Parked entries were refused for good and are kept for a look.
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS event_outbox (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    payload TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    parked_at INTEGER,
+                    last_error TEXT
                 )
                 """
             )
@@ -80,4 +94,43 @@ class Database:
                 (channel_id, user_id, ts_epoch),
             )
             await db.commit()
+
+    async def enqueue_event(self, payload: str, created_at: int) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "INSERT INTO event_outbox (payload, created_at) VALUES (?, ?)",
+                (payload, created_at),
+            )
+            await db.commit()
+
+    async def fetch_pending_events(self, limit: int) -> List[Tuple[int, str]]:
+        """Oldest pending entries first: the receiver must see them in order."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT id, payload FROM event_outbox WHERE parked_at IS NULL ORDER BY id LIMIT ?",
+                (limit,),
+            ) as cursor:
+                return [(int(row[0]), str(row[1])) for row in await cursor.fetchall()]
+
+    async def delete_events(self, ids: Sequence[int]) -> None:
+        if not ids:
+            return
+        placeholders = ", ".join("?" for _ in ids)
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(f"DELETE FROM event_outbox WHERE id IN ({placeholders})", tuple(ids))
+            await db.commit()
+
+    async def park_event(self, event_id: int, error: str, parked_at: int) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE event_outbox SET parked_at = ?, last_error = ? WHERE id = ?",
+                (parked_at, error, event_id),
+            )
+            await db.commit()
+
+    async def count_parked_events(self) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT count(*) FROM event_outbox WHERE parked_at IS NOT NULL") as cursor:
+                row = await cursor.fetchone()
+                return int(row[0]) if row else 0
 
