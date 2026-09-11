@@ -36,14 +36,22 @@ async def main() -> None:
     except ImportError:
         DefaultBotProperties = None  # type: ignore
 
+    session = None
+    if settings.TELEGRAM_PROXY:
+        from aiogram.client.session.aiohttp import AiohttpSession
+        session = AiohttpSession(proxy=settings.TELEGRAM_PROXY)
+        masked = settings.TELEGRAM_PROXY.split("@")[-1]
+        logging.getLogger(__name__).info("Telegram API via HTTP proxy: %s", masked)
+
     if DefaultBotProperties:
         bot = Bot(
             token=settings.BOT_TOKEN,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            session=session,
         )
     else:
         # Fallback for older Aiogram versions (<3.7)
-        bot = Bot(token=settings.BOT_TOKEN, parse_mode=ParseMode.HTML)
+        bot = Bot(token=settings.BOT_TOKEN, parse_mode=ParseMode.HTML, session=session)
     dp = Dispatcher()
 
     # Basic error logging handler (Aiogram 3.x ErrorEvent)

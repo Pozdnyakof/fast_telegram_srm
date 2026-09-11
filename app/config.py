@@ -31,10 +31,15 @@ class Settings(BaseSettings):
     TIMEZONE: str = "Europe/Moscow"
 
     # Optional: log joins even without invite link
-    LOG_JOINS_WITHOUT_INVITE: bool = False
+    LOG_JOINS_WITHOUT_INVITE: bool = True
 
     # Optional: run a Google Sheets self-check on startup
     GSHEETS_SELF_CHECK: bool = True
+
+    # Optional HTTP/HTTPS proxy for Telegram Bot API (used when host network blocks Telegram).
+    # Format: http://user:pass@host:port  — only Telegram traffic goes through it,
+    # Google Sheets stays direct.
+    TELEGRAM_PROXY: Optional[str] = None
 
 
 @lru_cache(maxsize=1)
