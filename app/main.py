@@ -15,6 +15,7 @@ from .services.container import ServiceContainer, set_container
 from .services.db import Database
 from .services.google_sheets import create_google_sheets_service_from_settings
 from .services.journal import EventJournal, PostgresSink, run_delivery
+from .services.our_accounts import OurAccounts, dsn_source
 
 
 async def main() -> None:
@@ -95,12 +96,38 @@ async def main() -> None:
         except Exception as e:
             logging.getLogger(__name__).exception("Google Sheets self-check failed: %s", e)
             # proceed to run to allow transient errors to resolve via backoff
-    journal = EventJournal(db) if settings.EVENT_JOURNAL_DSN else None
-    set_container(ServiceContainer(db=db, gsheets=gsheets, journal=journal))
+    dsn = settings.EVENT_JOURNAL_DSN
+    journal = EventJournal(db) if dsn else None
+    # Same DSN feeds the registry of our own accounts: which Telegram ids
+    # are ours, so their direct adds reach the client sheet. Off without a DSN.
+    our_accounts = OurAccounts(dsn_source(dsn)) if dsn else None
+    set_container(
+        ServiceContainer(
+            db=db, gsheets=gsheets, journal=journal, our_accounts=our_accounts,
+        ),
+    )
 
     logging.getLogger(__name__).info("Starting bot polling...")
-    async with journal_delivery(journal, settings.EVENT_JOURNAL_DSN):
+    async with journal_delivery(journal, dsn), our_account_refresh(our_accounts):
         await dp.start_polling(bot)
+
+
+@contextlib.asynccontextmanager
+async def our_account_refresh(
+    our_accounts: Optional[OurAccounts], stop_timeout: float = 10.0
+) -> AsyncIterator[None]:
+    """Keep the our-accounts registry current in the background."""
+    if our_accounts is None:
+        yield
+        return
+    stop = asyncio.Event()
+    task = asyncio.create_task(our_accounts.run(stop), name="our-accounts-refresh")
+    try:
+        yield
+    finally:
+        stop.set()
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(task, timeout=stop_timeout)
 
 
 @contextlib.asynccontextmanager

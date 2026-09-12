@@ -6,6 +6,7 @@ from typing import Optional
 from .db import Database
 from .google_sheets import GoogleSheetsService
 from .journal import EventJournal
+from .our_accounts import OurAccounts
 
 
 @dataclass
@@ -14,6 +15,9 @@ class ServiceContainer:
     gsheets: GoogleSheetsService
     # None while EVENT_JOURNAL_DSN is unset: membership changes are not journaled.
     journal: Optional[EventJournal] = None
+    # None while EVENT_JOURNAL_DSN is unset: our own accounts cannot be told
+    # apart from other admins, so their direct adds are not written to the sheet.
+    our_accounts: Optional[OurAccounts] = None
 
 
 _container: Optional[ServiceContainer] = None

@@ -21,7 +21,8 @@ async def on_chat_member(update: ChatMemberUpdated, event_update: Optional[Updat
     sheet's own skip rules below. `event_update` is the raw update that
     aiogram passes along; its update_id keeps the journal free of repeats.
     """
-    await record_quietly(get_container().journal, lambda: event_from_member_update(update, event_update))
+    container = get_container()
+    await record_quietly(container.journal, lambda: event_from_member_update(update, event_update))
     chat = update.chat
     if chat is None or chat.type not in ("channel", "supergroup"):
         logging.getLogger(__name__).info(
@@ -64,7 +65,19 @@ async def on_chat_member(update: ChatMemberUpdated, event_update: Optional[Updat
     # Bot API: invite_link present when user joins via link; via_join_request indicates approved request without link in this update;
     # via_chat_folder_invite_link indicates join via folder-wide link (no per-link name).
     invite_based = bool(update.invite_link) or getattr(update, "via_join_request", False) or getattr(update, "via_chat_folder_invite_link", False)
-    if not invite_based:
+    # A direct add by one of our own accounts: from_user is the account
+    # that added the person, not the person themselves. Such invites go
+    # to the client sheet even without a link — that is the whole point
+    # of this integration — but only ours, told apart by Telegram id.
+    actor = getattr(update, "from_user", None)
+    actor_id = getattr(actor, "id", None)
+    invited_by_us = (
+        container.our_accounts is not None
+        and actor_id is not None
+        and actor_id != user.id
+        and container.our_accounts.contains(actor_id)
+    )
+    if not invite_based and not invited_by_us:
         from ..config import get_settings
         if not get_settings().LOG_JOINS_WITHOUT_INVITE:
             logging.getLogger(__name__).info(
@@ -86,11 +99,15 @@ async def on_chat_member(update: ChatMemberUpdated, event_update: Optional[Updat
     # If joined via chat folder invite link, annotate for clarity
     if getattr(update, "via_chat_folder_invite_link", False) and not invite_name:
         invite_name = "(folder invite)"
+    # Our direct add has no link, so the "Invite Link" column would be
+    # empty. Put the inviting account there instead — @username or id —
+    # so the client sees which of our accounts brought the person.
+    if invited_by_us and not invite_url:
+        invite_url = f"@{actor.username}" if getattr(actor, "username", None) else str(actor_id)
     if not invite_url and not invite_name:
         invite_name = "(no invite)"
 
     # Resolve sheet name from DB or create fallback
-    container = get_container()
     sheet_name = await container.db.get_sheet_name(channel_id)
     if not sheet_name:
         # Fallback: ensure sheet by channel title and persist mapping
